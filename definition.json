@@ -1,0 +1,31 @@
+{
+  "icon": "./assets/icon.svg",
+  "name": "sdk-chart-assistant",
+  "hint": "null",
+  "settings": [
+    {
+      "name": {
+        "key": "group"
+      },
+      "settings": [
+        {
+          "name": {
+            "key": "setting"
+          },
+          "key": "key1",
+          "type": "boolean"
+        }
+      ]
+    }
+  ],
+  "bindingsTrays": [
+    {
+      "key": "tray-key",
+      "name": {
+        "key": "tray"
+      },
+      "queryRole": "measure",
+      "minCount": 1
+    }
+  ]
+}
