@@ -2,6 +2,9 @@
   "icon": "./assets/icon.svg",
   "name": "sdk-chart-assistant",
   "hint": "null",
+  "options": {
+    "aggregation": true
+  },
   "settings": [
     {
       "name": {
@@ -20,12 +23,19 @@
   ],
   "bindingsTrays": [
     {
-      "key": "tray-key",
+      "key": "measure-key",
       "name": {
-        "key": "tray"
+        "key": "measure"
       },
       "queryRole": "measure",
       "minCount": 1
+    },
+    {
+      "key": "group-key",
+      "name": {
+        "key": "group by"
+      },
+      "queryRole": "row"
     }
   ]
 }
