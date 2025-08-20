@@ -7,9 +7,9 @@ import {
 } from '@incorta-org/component-sdk';
 import React, { useState, useEffect, useMemo } from 'react';
 import OpenAI from 'openai';
-import DataAnalyzer, { DataInsights } from './utils/DataAnalyzer';
 import ChartPreview, { ChartConfig } from './components/ChartPreview';
-import ChartConfigGenerator from './utils/ChartConfigGenerator';
+import DataSampler from './utils/DataSampler';
+// import DataMapper from './utils/DataMapper';
 
 interface Props {
   context: Context<TContext>;
@@ -29,7 +29,7 @@ type AppMode = 'initial' | 'chart-building' | 'chart-editing';
 
 const SdkChartAssistant = ({ context, prompts, data, drillDown }: Props) => {
   console.log({ context, prompts, data, drillDown });
-  console.log('Data structure:', JSON.stringify(data, null, 2));
+  // console.log('Data structure:', JSON.stringify(data, null, 2));
   
   const [currentMode, setCurrentMode] = useState<AppMode>('initial');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
@@ -40,111 +40,78 @@ const SdkChartAssistant = ({ context, prompts, data, drillDown }: Props) => {
   const [currentChart, setCurrentChart] = useState<ChartConfig | null>(null);
   const [isGeneratingChart, setIsGeneratingChart] = useState(false);
 
-  // Analyze data using DataAnalyzer
-  const dataInsights = useMemo(() => {
+  // Extract data sample for LLM
+  const dataSample = useMemo(() => {
     if (!data || !data.data || data.data.length === 0) {
       return null;
     }
     try {
-      const analyzer = new DataAnalyzer(data);
-      return analyzer.analyze();
+      return DataSampler.extractSample(data, 5);
     } catch (error) {
-      console.error('Error analyzing data:', error);
+      console.error('Error extracting data sample:', error);
       return null;
     }
   }, [data]);
 
-  // Chart config generator
-  const chartConfigGenerator = useMemo(() => {
-    if (!data || !data.data || data.data.length === 0) {
-      return null;
-    }
-    try {
-      const analyzer = new DataAnalyzer(data);
-      return new ChartConfigGenerator(analyzer);
-    } catch (error) {
-      console.error('Error creating chart config generator:', error);
-      return null;
-    }
-  }, [data]);
-
-  // Log data insights for debugging
+  // Log data sample for debugging
   useEffect(() => {
-    if (dataInsights) {
-      console.log('=== Data Analysis Results ===');
-      console.log('Columns:', dataInsights.columns.length);
-      console.log('Row count:', dataInsights.rowCount);
-      console.log('Data complexity:', dataInsights.dataComplexity);
-      console.log('Has time column:', dataInsights.hasTimeColumn);
-      console.log('Chart suggestions:', dataInsights.suggestedCharts.map(s => 
-        `${s.type} (${Math.round(s.confidence * 100)}%): ${s.reasoning}`
-      ));
-      console.log('Full analysis:', dataInsights);
+    if (dataSample) {
+      console.log('=== Data Sample for LLM ===');
+      console.log('Sample:', dataSample);
+      console.log('Formatted for LLM:');
+      console.log(DataSampler.formatForLLM(dataSample));
     }
-  }, [dataInsights]);
+  }, [dataSample]);
 
-  // Generate fallback chart when data is available but no chart has been created
-  useEffect(() => {
-    if (dataInsights && !currentChart && currentMode === 'initial' && chartConfigGenerator) {
-      // Auto-generate a chart suggestion based on data analysis
-      const fallbackChart = chartConfigGenerator.generateFallbackChart();
-      if (fallbackChart) {
-        setCurrentChart(fallbackChart);
-      }
-    }
-  }, [dataInsights, currentChart, currentMode, chartConfigGenerator]);
+
+
+
 
   const getSystemPrompt = () => {
-    const dataContext = dataInsights ? `
-    
-CURRENT DATA ANALYSIS:
-- Total Rows: ${dataInsights.rowCount}
-- Columns: ${dataInsights.columns.length}
-- Data Complexity: ${dataInsights.dataComplexity}
-- Has Time Data: ${dataInsights.hasTimeColumn ? 'Yes' : 'No'}
-- Is Aggregated: ${dataInsights.isAggregated ? 'Yes' : 'No'}
-
-AVAILABLE COLUMNS:
-${dataInsights.columns.map(col => 
-  `- ${col.name} (${col.dataType}, ${col.isMeasure ? 'Measure' : 'Dimension'}, ${col.uniqueValues} unique values)`
-).join('\n')}
-
-SUGGESTED CHART TYPES (by confidence):
-${dataInsights.suggestedCharts.map(suggestion => 
-  `- ${suggestion.type.toUpperCase()}: ${suggestion.reasoning} (confidence: ${Math.round(suggestion.confidence * 100)}%)`
-).join('\n')}
-    ` : '';
+    const dataContext = dataSample ? DataSampler.formatForLLM(dataSample) : '';
+    const transformationGuidance = DataSampler.getTransformationPrompt();
 
     return `
 You are an expert data visualization assistant specialized in creating Highcharts configurations.
 
 CONTEXT: You're working with query data from an analytics platform. Users will describe their data and visualization needs.
+
 ${dataContext}
 
+${transformationGuidance}
+
 CAPABILITIES:
-1. Analyze data structure and recommend optimal chart types
+1. Analyze the provided data sample and recommend optimal chart types
 2. Generate complete Highcharts configuration objects
 3. Explain visualization choices with clear reasoning
-4. Adapt charts based on user feedback
-5. Suggest data insights and alternative visualizations
+4. Suggest data transformations when needed
+5. Adapt charts based on user feedback
+
+IMPORTANT: Use the ACTUAL data from the sample above in your Highcharts configuration. The categories and data values should match the real data provided.
 
 RESPONSE FORMAT: Always respond with JSON containing:
 {
-  "explanation": "Clear explanation of chart choice and insights",
+  "explanation": "Clear explanation of chart choice, data analysis, and any suggested transformations",
   "chartType": "bar|line|pie|scatter|area|column",
   "confidence": 0.9,
-  "highchartsConfig": { /* Complete Highcharts options */ },
-  "insights": ["Data insight 1", "Data insight 2"],
-  "alternatives": [{"type": "line", "reason": "Better for trends"}]
+  "highchartsConfig": { 
+    /* Complete Highcharts options using REAL data from the sample */
+    "series": [{"name": "ActualColumnName", "data": [real, data, values]}],
+    "xAxis": {"categories": ["real", "category", "names"]}
+  },
+  "dataTransformations": ["Optional: List any data transformations you recommend"],
+  "insights": ["Data insight 1 based on actual data", "Data insight 2"],
+  "alternatives": [{"type": "line", "reason": "Better for trends if data was time-based"}]
 }
 
 CHART TYPE GUIDELINES:
-- Bar/Column: Comparisons between categories
-- Line: Trends over time
-- Pie: Part-to-whole relationships (limit to 5-7 slices)
+- Bar/Column: Comparisons between categories (like the data sample shows)
+- Line: Trends over time (if temporal data is present)
+- Pie: Part-to-whole relationships (good for categorical breakdowns)
 - Scatter: Correlations between two variables
 - Area: Cumulative values over time
 
+CRITICAL: Always use the real data from the sample in your Highcharts configuration. Never use placeholder data.
 Use the data analysis above to make informed recommendations. Always prioritize data clarity and user experience.
     `;
   };
@@ -167,129 +134,130 @@ Use the data analysis above to make informed recommendations. Always prioritize 
     setCurrentInput('');
     setIsLoading(true);
 
-    const apiKey = import.meta.env.VITE_API_KEY;
-    
-    if (!apiKey) {
-      const errorMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        type: 'assistant',
-        content: 'API key not found. Please check your environment configuration.',
-        timestamp: new Date()
-      };
-      setChatHistory(prev => [...prev, errorMessage]);
-      setIsLoading(false);
-      return;
-    }
-
     try {
         const openai = new OpenAI({
           baseURL: "https://openrouter.ai/api/v1",
-          apiKey: apiKey,
+          apiKey: import.meta.env.VITE_API_KEY,
           dangerouslyAllowBrowser: true
         });
 
-          // const completion = await openai.chat.completions.create({
-          //   model: "openai/gpt-oss-20b:free",
-          //   messages: [
-          //     {
-          //       "role": "system",
-          //       "content": getSystemPrompt()
-          //     },
-          //     {
-          //       "role": "user",
-          //       "content": currentInput
-          //     }
-          //   ],
-          // });
-
-          const completion = `json
-{
-  "explanation": "Using a column chart lets us compare the number of products within each category side‑by‑side, which is ideal for a simple count comparison across groups. The x‑axis lists categories, while the y‑axis shows the aggregated product counts. This format is easy to read and immediately highlights which category contains the most products.",
-  "chartType": "column",
-  "confidence": 0.9,
-  "highchartsConfig": {
-    "chart": {
-      "type": "column"
-    },
-    "title": {
-      "text": "Number of Products per Category"
-    },
-    "xAxis": {
-      "categories": ["Category A", "Category B", "Category C"],
-      "title": {
-        "text": "Category"
-      }
-    },
-    "yAxis": {
-      "min": 0,
-      "title": {
-        "text": "Product Count"
-      },
-      "labels": {
-        "format": "{value}"
-      }
-    },
-    "tooltip": {
-      "shared": true,
-      "pointFormat": "<b>{point.y}</b> products"
-    },
-    "plotOptions": {
-      "column": {
-        "dataLabels": {
-          "enabled": true
-        }
-      }
-    },
-    "series": [
-      {
-        "name": "Products",
-        "data": [2, 2, 1]
-      }
-    ]
-  },
-  "insights": [
-    "Category A and B lead with the highest number of products, each having 2 items.",
-    "Category C is the smallest group with only 1."
-  ],
-  "alternatives": [
-    {
-      "type": "bar",
-      "reason": "A horizontal bar chart can be more readable for long category names."
-    },
-    {
-      "type": "pie",
-      "reason": "A pie chart provides a quick visual of each category’s share of the total, but only if you have fewer than 7 categories."
-    }
-  ]
-}
-          `;
+          const completion = await openai.chat.completions.create({
+            model: "openai/gpt-oss-20b:free",
+            messages: [
+              {
+                "role": "system",
+                "content": getSystemPrompt()
+              },
+              {
+                "role": "user",
+                "content": currentInput
+              }
+            ],
+          });
         
+          console.log({ completion });
+
+//           const completion = `json
+// {
+//   "explanation": "Using a column chart lets us compare the number of products within each category side‑by‑side, which is ideal for a simple count comparison across groups. The x‑axis lists categories, while the y‑axis shows the aggregated product counts. This format is easy to read and immediately highlights which category contains the most products.",
+//   "chartType": "column",
+//   "confidence": 0.9,
+//   "highchartsConfig": {
+//     "chart": {
+//       "type": "column"
+//     },
+//     "title": {
+//       "text": "Number of Products per Category"
+//     },
+//     "xAxis": {
+//       "categories": ["Category A", "Category B", "Category C"],
+//       "title": {
+//         "text": "Category"
+//       }
+//     },
+//     "yAxis": {
+//       "min": 0,
+//       "title": {
+//         "text": "Product Count"
+//       },
+//       "labels": {
+//         "format": "{value}"
+//       }
+//     },
+//     "tooltip": {
+//       "shared": true,
+//       "pointFormat": "<b>{point.y}</b> products"
+//     },
+//     "plotOptions": {
+//       "column": {
+//         "dataLabels": {
+//           "enabled": true
+//         }
+//       }
+//     },
+//     "series": [
+//       {
+//         "name": "Products",
+//         "data": [2, 2, 1]
+//       }
+//     ]
+//   },
+//   "insights": [
+//     "Category A and B lead with the highest number of products, each having 2 items.",
+//     "Category C is the smallest group with only 1."
+//   ],
+//   "alternatives": [
+//     {
+//       "type": "bar",
+//       "reason": "A horizontal bar chart can be more readable for long category names."
+//     },
+//     {
+//       "type": "pie",
+//       "reason": "A pie chart provides a quick visual of each category’s share of the total, but only if you have fewer than 7 categories."
+//     }
+//   ]
+// }
+//           `;
+        
+        let parsedResponse = null;
+        try {
+          // const jsonMatch = completion.match(/\{[\s\S]*\}/);
+          const jsonMatch = completion.choices[0].message.content?.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            parsedResponse = JSON.parse(jsonMatch[0]);
+            console.log({ parsedResponse });
+          }
+          // const parsedResponse = JSON.parse(completion.choices[0].message.content || '{}');
+        } catch (error) {
+          console.error('Error parsing JSON:', error);
+        }
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 2).toString(),
         type: 'assistant',
         // content: completion.choices[0].message.content || 'No response received',
-        content: completion,
+        content: parsedResponse?.explanation || 'No response received',
         timestamp: new Date()
       };
 
       setChatHistory(prev => [...prev, assistantMessage]);
       
-      // Generate chart from LLM response
-      if (chartConfigGenerator) {
+              // Generate chart from LLM response
         setIsGeneratingChart(true);
         try {
-          // const chartConfig = chartConfigGenerator.generateFromLLMResponse(
-          //   completion.choices[0].message.content || ''
-          // );
-          const chartConfig = chartConfigGenerator.generateFromLLMResponse(completion);
-          if (chartConfig) {
+          if (parsedResponse && parsedResponse.chartType && parsedResponse.highchartsConfig) {
+            const chartConfig: ChartConfig = {
+              type: parsedResponse.chartType,
+              title: parsedResponse.highchartsConfig.title?.text || 'Chart',
+              explanation: parsedResponse.explanation || '',
+              confidence: parsedResponse.confidence || 0.8,
+              highchartsOptions: parsedResponse.highchartsConfig
+            };
             setCurrentChart(chartConfig);
           }
         } catch (chartError) {
           console.error('Error generating chart:', chartError);
         }
         setIsGeneratingChart(false);
-      }
       
       if (currentMode === 'initial') {
         setCurrentMode('chart-building');
@@ -333,7 +301,7 @@ Use the data analysis above to make informed recommendations. Always prioritize 
     }
   };
 
-  console.log("transformed data", chartConfigGenerator?.getTransformedData(currentChart?.type || ''));
+
 
   return (
     <div className="sdk-chart-assistant">
@@ -345,17 +313,23 @@ Use the data analysis above to make informed recommendations. Always prioritize 
           </div>
           
           <div className="chart-container">
-            <ChartPreview
-              chartConfig={currentChart}
-              transformedData={currentChart && chartConfigGenerator ? 
-                chartConfigGenerator.getTransformedData(currentChart.type) : null
-              }
-              dataInsights={dataInsights}
-              isLoading={isGeneratingChart}
-              onChartReady={(chart) => {
-                console.log('Chart ready:', chart);
-              }}
-            />
+            {currentChart ? (
+              <ChartPreview
+                chartConfig={currentChart}
+                isLoading={isGeneratingChart}
+                onChartReady={(chart) => {
+                  console.log('Chart ready:', chart);
+                }}
+              />
+            ) : (
+              <div className="chart-placeholder">
+                <div className="placeholder-content">
+                  <div className="placeholder-icon">📊</div>
+                  <h4>Your chart will appear here</h4>
+                  <p>Start a conversation to generate a chart visualization</p>
+                </div>
+              </div>
+            )}
           </div>
 
                      <div className="chart-options">
@@ -425,18 +399,7 @@ Use the data analysis above to make informed recommendations. Always prioritize 
               <div className="welcome-message">
                 <h4>Welcome to Chart Assistant!</h4>
                 <p>I can see your data is ready for analysis. Describe what kind of chart you'd like to create!</p>
-                {dataInsights && dataInsights.suggestedCharts.length > 0 && (
-                  <div className="auto-suggestions">
-                    <p><strong>Quick suggestions based on your data:</strong></p>
-                    <ul>
-                      {dataInsights.suggestedCharts.slice(0, 2).map((suggestion, index) => (
-                        <li key={index}>
-                          Try a <strong>{suggestion.type}</strong> chart - {suggestion.reasoning}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                
               </div>
             ) : (
               chatHistory.map((message) => (

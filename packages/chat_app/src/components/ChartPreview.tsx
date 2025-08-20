@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Highcharts from 'highcharts';
 import HighchartsReact from 'highcharts-react-official';
-import { DataInsights, TransformedChartData } from '../utils/DataAnalyzer';
+// import { DataInsights, TransformedChartData } from '../utils/DataAnalyzer';
 
 export interface ChartConfig {
   type: string;
@@ -13,16 +13,12 @@ export interface ChartConfig {
 
 interface ChartPreviewProps {
   chartConfig: ChartConfig | null;
-  transformedData: TransformedChartData | null;
-  dataInsights: DataInsights | null;
   isLoading?: boolean;
   onChartReady?: (chart: Highcharts.Chart) => void;
 }
 
 const ChartPreview: React.FC<ChartPreviewProps> = ({
   chartConfig,
-  transformedData,
-  dataInsights,
   isLoading = false,
   onChartReady
 }) => {
@@ -31,9 +27,9 @@ const ChartPreview: React.FC<ChartPreviewProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (chartConfig && transformedData) {
+    if (chartConfig) {
       try {
-        const options = generateHighchartsOptions(chartConfig, transformedData, dataInsights);
+        const options = generateHighchartsOptions(chartConfig);
         setChartOptions(options);
         setError(null);
       } catch (err) {
@@ -43,7 +39,7 @@ const ChartPreview: React.FC<ChartPreviewProps> = ({
     } else {
       setChartOptions(null);
     }
-  }, [chartConfig, transformedData, dataInsights]);
+  }, [chartConfig]);
 
   const handleChartCreated = (chart: Highcharts.Chart) => {
     if (onChartReady) {
@@ -79,15 +75,7 @@ const ChartPreview: React.FC<ChartPreviewProps> = ({
   }
 
   if (!chartOptions) {
-    return (
-      <div className="chart-placeholder">
-        <div className="placeholder-content">
-          <div className="placeholder-icon">📊</div>
-          <h4>Your chart will appear here</h4>
-          <p>Start by describing your data in the chat to generate a visualization</p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   console.log({ chartOptions });
@@ -103,7 +91,7 @@ const ChartPreview: React.FC<ChartPreviewProps> = ({
         />
       </div>
       
-      {chartConfig && (
+      {/* {chartConfig && (
         <div className="chart-metadata">
           <div className="chart-info">
             <span className="chart-type">{chartConfig.type.toUpperCase()}</span>
@@ -117,7 +105,7 @@ const ChartPreview: React.FC<ChartPreviewProps> = ({
             <p className="chart-explanation">{chartConfig.explanation}</p>
           )}
         </div>
-      )}
+      )} */}
     </div>
   );
 };
@@ -127,8 +115,6 @@ const ChartPreview: React.FC<ChartPreviewProps> = ({
  */
 function generateHighchartsOptions(
   chartConfig: ChartConfig,
-  transformedData: TransformedChartData,
-  dataInsights: DataInsights | null
 ): Highcharts.Options {
   const baseOptions: Highcharts.Options = {
     accessibility: {
@@ -160,65 +146,51 @@ function generateHighchartsOptions(
     }
   };
 
-  // Use provided highchartsOptions from LLM if available, otherwise generate based on type
+  // Use provided highchartsOptions from LLM (should be complete with real data)
   if (chartConfig.highchartsOptions && Object.keys(chartConfig.highchartsOptions).length > 0) {
-    return mergeChartOptions(baseOptions, chartConfig.highchartsOptions, transformedData);
+    return {
+      ...baseOptions,
+      ...chartConfig.highchartsOptions
+    };
   }
+
+  return baseOptions;
 
   // Generate options based on chart type
-  switch (chartConfig.type.toLowerCase()) {
-    case 'bar':
-      return generateBarChartOptions(baseOptions, transformedData, dataInsights);
+//   switch (chartConfig.type.toLowerCase()) {
+//     case 'bar':
+//       return generateBarChartOptions(baseOptions, transformedData, dataInsights);
     
-    case 'column':
-      return generateColumnChartOptions(baseOptions, transformedData, dataInsights);
+//     case 'column':
+//       return generateColumnChartOptions(baseOptions, transformedData, dataInsights);
     
-    case 'line':
-      return generateLineChartOptions(baseOptions, transformedData, dataInsights);
+//     case 'line':
+//       return generateLineChartOptions(baseOptions, transformedData, dataInsights);
     
-    case 'area':
-      return generateAreaChartOptions(baseOptions, transformedData, dataInsights);
+//     case 'area':
+//       return generateAreaChartOptions(baseOptions, transformedData, dataInsights);
     
-    case 'pie':
-      return generatePieChartOptions(baseOptions, transformedData, dataInsights);
+//     case 'pie':
+//       return generatePieChartOptions(baseOptions, transformedData, dataInsights);
     
-    case 'donut':
-      return generateDonutChartOptions(baseOptions, transformedData, dataInsights);
+//     case 'donut':
+//       return generateDonutChartOptions(baseOptions, transformedData, dataInsights);
     
-    case 'scatter':
-      return generateScatterChartOptions(baseOptions, transformedData, dataInsights);
+//     case 'scatter':
+//       return generateScatterChartOptions(baseOptions, transformedData, dataInsights);
     
-    default:
-      return generateColumnChartOptions(baseOptions, transformedData, dataInsights);
-  }
+//     default:
+//       return generateColumnChartOptions(baseOptions, transformedData, dataInsights);
+//   }
 }
 
-/**
- * Merge base options with custom options and apply data
- */
-function mergeChartOptions(
-  baseOptions: Highcharts.Options,
-  customOptions: Highcharts.Options,
-  transformedData: TransformedChartData
-): Highcharts.Options {
-  return {
-    ...baseOptions,
-    ...customOptions,
-    series: (transformedData.series || customOptions.series || []) as any,
-    xAxis: {
-      ...customOptions.xAxis,
-      categories: transformedData.categories || (customOptions.xAxis as any)?.categories
-    }
-  };
-}
+
 
 /**
  * Generate bar chart options
  */
 function generateBarChartOptions(
   baseOptions: Highcharts.Options,
-  transformedData: TransformedChartData,
-  dataInsights: DataInsights | null
 ): Highcharts.Options {
   return {
     ...baseOptions,
@@ -227,20 +199,20 @@ function generateBarChartOptions(
       height: 400
     },
     title: {
-      text: getChartTitle('Bar Chart', dataInsights)
+      // text: getChartTitle('Bar Chart', dataInsights)
     },
     xAxis: {
-      categories: transformedData.categories || [],
+      categories: [],
       title: {
-        text: getCategoryAxisTitle(dataInsights)
+        // text: getCategoryAxisTitle(dataInsights)
       }
     },
     yAxis: {
       title: {
-        text: getValueAxisTitle(dataInsights)
+        // text: getValueAxisTitle(dataInsights)
       }
     },
-    series: (transformedData.series || []) as any,
+    series: ([]) as any,
     plotOptions: {
       bar: {
         dataLabels: {
@@ -256,8 +228,6 @@ function generateBarChartOptions(
  */
 function generateColumnChartOptions(
   baseOptions: Highcharts.Options,
-  transformedData: TransformedChartData,
-  dataInsights: DataInsights | null
 ): Highcharts.Options {
   return {
     ...baseOptions,
@@ -266,20 +236,20 @@ function generateColumnChartOptions(
       height: 400
     },
     title: {
-      text: getChartTitle('Column Chart', dataInsights)
+      // text: getChartTitle('Column Chart')
     },
     xAxis: {
-      categories: transformedData.categories || [],
+      categories: [],
       title: {
-        text: getCategoryAxisTitle(dataInsights)
+        // text: getCategoryAxisTitle()
       }
     },
     yAxis: {
       title: {
-        text: getValueAxisTitle(dataInsights)
+        // text: getValueAxisTitle()
       }
     },
-    series: (transformedData.series || []) as any,
+    series: ([]) as any,
     plotOptions: {
       column: {
         dataLabels: {
@@ -295,8 +265,6 @@ function generateColumnChartOptions(
  */
 function generateLineChartOptions(
   baseOptions: Highcharts.Options,
-  transformedData: TransformedChartData,
-  dataInsights: DataInsights | null
 ): Highcharts.Options {
   return {
     ...baseOptions,
@@ -305,20 +273,20 @@ function generateLineChartOptions(
       height: 400
     },
     title: {
-      text: getChartTitle('Line Chart', dataInsights)
+      // text: getChartTitle('Line Chart')
     },
     xAxis: {
-      categories: transformedData.categories || [],
+      categories: [],
       title: {
-        text: getCategoryAxisTitle(dataInsights)
+        // text: getCategoryAxisTitle()
       }
     },
     yAxis: {
       title: {
-        text: getValueAxisTitle(dataInsights)
+        // text: getValueAxisTitle()
       }
     },
-    series: (transformedData.series || []) as any,
+    series: ([]) as any,
     plotOptions: {
       line: {
         dataLabels: {
@@ -334,8 +302,6 @@ function generateLineChartOptions(
  */
 function generateAreaChartOptions(
   baseOptions: Highcharts.Options,
-  transformedData: TransformedChartData,
-  dataInsights: DataInsights | null
 ): Highcharts.Options {
   return {
     ...baseOptions,
@@ -344,20 +310,20 @@ function generateAreaChartOptions(
       height: 400
     },
     title: {
-      text: getChartTitle('Area Chart', dataInsights)
+      // text: getChartTitle('Area Chart')
     },
     xAxis: {
-      categories: transformedData.categories || [],
+      categories: [],
       title: {
-        text: getCategoryAxisTitle(dataInsights)
+        // text: getCategoryAxisTitle()
       }
     },
     yAxis: {
       title: {
-        text: getValueAxisTitle(dataInsights)
+        // text: getValueAxisTitle()
       }
     },
-    series: (transformedData.series || []) as any,
+    series: ([]) as any,
     plotOptions: {
       area: {
         stacking: 'normal',
@@ -377,8 +343,6 @@ function generateAreaChartOptions(
  */
 function generatePieChartOptions(
   baseOptions: Highcharts.Options,
-  transformedData: TransformedChartData,
-  dataInsights: DataInsights | null
 ): Highcharts.Options {
   return {
     ...baseOptions,
@@ -387,9 +351,9 @@ function generatePieChartOptions(
       height: 400
     },
     title: {
-      text: getChartTitle('Pie Chart', dataInsights)
+      // text: getChartTitle('Pie Chart', dataInsights)
     },
-    series: (transformedData.series || []) as any,
+    series: ([]) as any,
     plotOptions: {
       pie: {
         allowPointSelect: true,
@@ -408,8 +372,8 @@ function generatePieChartOptions(
  */
 function generateDonutChartOptions(
   baseOptions: Highcharts.Options,
-  transformedData: TransformedChartData,
-  dataInsights: DataInsights | null
+  // transformedData: TransformedChartData,
+  // dataInsights: DataInsights | null 
 ): Highcharts.Options {
   return {
     ...baseOptions,
@@ -418,12 +382,12 @@ function generateDonutChartOptions(
       height: 400
     },
     title: {
-      text: getChartTitle('Donut Chart', dataInsights)
+      // text: getChartTitle('Donut Chart', dataInsights)
     },
-    series: (transformedData.series.map(series => ({
+    series: ([] as any).map((series: any) => ({
       ...series,
       innerSize: '50%'
-    })) || []) as any,
+    })) as any,
     plotOptions: {
       pie: {
         allowPointSelect: true,
@@ -442,8 +406,8 @@ function generateDonutChartOptions(
  */
 function generateScatterChartOptions(
   baseOptions: Highcharts.Options,
-  transformedData: TransformedChartData,
-  dataInsights: DataInsights | null
+  // transformedData: TransformedChartData,
+  // dataInsights: DataInsights | null
 ): Highcharts.Options {
   return {
     ...baseOptions,
@@ -452,19 +416,19 @@ function generateScatterChartOptions(
       height: 400
     } as any,
     title: {
-      text: getChartTitle('Scatter Plot', dataInsights)
+      // text: getChartTitle('Scatter Plot', dataInsights)
     },
     xAxis: {
       title: {
-        text: getNumericAxisTitle(dataInsights, 0)
+        // text: getNumericAxisTitle(dataInsights, 0)
       }
     },
     yAxis: {
       title: {
-        text: getNumericAxisTitle(dataInsights, 1)
+        // text: getNumericAxisTitle(dataInsights, 1)
       }
     },
-    series: (transformedData.series || []) as any,
+    series: ([] as any),
     plotOptions: {
       scatter: {
         marker: {
@@ -484,40 +448,40 @@ function generateScatterChartOptions(
 /**
  * Helper functions for generating titles and labels
  */
-function getChartTitle(defaultTitle: string, dataInsights: DataInsights | null): string {
-  if (!dataInsights || dataInsights.columns.length === 0) {
-    return defaultTitle;
-  }
+// function getChartTitle(defaultTitle: string | null): string {
+//   if (!dataInsights || dataInsights.columns.length === 0) {
+//     return defaultTitle;
+//   }
   
-  const measures = dataInsights.columns.filter(col => col.isMeasure);
-  const dimensions = dataInsights.columns.filter(col => col.isDimension);
+//   const measures = dataInsights.columns.filter(col => col.isMeasure);
+//   const dimensions = dataInsights.columns.filter(col => col.isDimension);
   
-  if (measures.length > 0 && dimensions.length > 0) {
-    return `${measures[0].name} by ${dimensions[0].name}`;
-  }
+//   if (measures.length > 0 && dimensions.length > 0) {
+//     return `${measures[0].name} by ${dimensions[0].name}`;
+//   }
   
-  return dataInsights.columns[0]?.name || defaultTitle;
-}
+//   return dataInsights.columns[0]?.name || defaultTitle;
+// }
 
-function getCategoryAxisTitle(dataInsights: DataInsights | null): string {
-  if (!dataInsights) return '';
+// function getCategoryAxisTitle(): string {
+//   if (!dataInsights) return '';
   
-  const dimension = dataInsights.columns.find(col => col.isDimension);
-  return dimension?.name || '';
-}
+//   const dimension = dataInsights.columns.find(col => col.isDimension);
+//   return dimension?.name || '';
+// }
 
-function getValueAxisTitle(dataInsights: DataInsights | null): string {
-  if (!dataInsights) return '';
+// function getValueAxisTitle(): string {
+//   if (!dataInsights) return '';
   
-  const measure = dataInsights.columns.find(col => col.isMeasure);
-  return measure?.name || '';
-}
+//   const measure = dataInsights.columns.find(col => col.isMeasure);
+//   return measure?.name || '';
+// }
 
-function getNumericAxisTitle(dataInsights: DataInsights | null, index: number): string {
-  if (!dataInsights) return '';
+// function getNumericAxisTitle(index: number): string {
+//   if (!dataInsights) return '';
   
-  const numericColumns = dataInsights.columns.filter(col => col.hasNumericValues);
-  return numericColumns[index]?.name || '';
-}
+//   const numericColumns = dataInsights.columns.filter(col => col.hasNumericValues);
+//   return numericColumns[index]?.name || '';
+// }
 
 export default ChartPreview;

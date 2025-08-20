@@ -35,7 +35,8 @@
       "name": {
         "key": "group by"
       },
-      "queryRole": "row"
+      "queryRole": "row",
+      "maxCount": 2
     }
   ]
 }
