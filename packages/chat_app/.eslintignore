@@ -1,7 +1,0 @@
-assets/
-locales/
-dist/
-coverage/
-node_modules/
-**/*.test*
-src/typings.d.ts

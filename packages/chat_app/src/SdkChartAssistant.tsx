@@ -1,22 +1,11 @@
-import {
-  AppliedPrompts,
-  Context,
-  onDrillDownFunction,
-  ResponseData,
-  TContext
-} from '@incorta-org/component-sdk';
-import React, { useState, useEffect, useMemo } from 'react';
-import OpenAI from 'openai';
-import ChartPreview, { ChartConfig } from './components/ChartPreview';
-import DataSampler from './utils/DataSampler';
-// import DataMapper from './utils/DataMapper';
 
-interface Props {
-  context: Context<TContext>;
-  prompts: AppliedPrompts;
-  data: ResponseData;
-  drillDown: onDrillDownFunction;
-}
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { CONFIG } from '../../shared/src/constants';
+import './styles.css';
+import axios from 'axios';
+// import OpenAI from 'openai';
+// Remove chart preview - handled by separate preview app
+// import DataMapper from './utils/DataMapper';
 
 interface ChatMessage {
   id: string;
@@ -27,8 +16,8 @@ interface ChatMessage {
 
 type AppMode = 'initial' | 'chart-building' | 'chart-editing';
 
-const SdkChartAssistant = ({ context, prompts, data, drillDown }: Props) => {
-  console.log({ context, prompts, data, drillDown });
+const SdkChartAssistant = () => {
+  // console.log({ context, prompts, data, drillDown });
   // console.log('Data structure:', JSON.stringify(data, null, 2));
   
   const [currentMode, setCurrentMode] = useState<AppMode>('initial');
@@ -36,49 +25,45 @@ const SdkChartAssistant = ({ context, prompts, data, drillDown }: Props) => {
   const [currentInput, setCurrentInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
-  // Chart state management
-  const [currentChart, setCurrentChart] = useState<ChartConfig | null>(null);
-  const [isGeneratingChart, setIsGeneratingChart] = useState(false);
+  // No chart state needed - charts handled by preview app
 
   // Extract data sample for LLM
-  const dataSample = useMemo(() => {
-    if (!data || !data.data || data.data.length === 0) {
-      return null;
-    }
-    try {
-      return DataSampler.extractSample(data, 5);
-    } catch (error) {
-      console.error('Error extracting data sample:', error);
-      return null;
-    }
-  }, [data]);
+  // const dataSample = useMemo(() => {
+  //   if (!data || !data.data || data.data.length === 0) {
+  //     return null;
+  //   }
+  //   try {
+  //     return DataSampler.extractSample(data, 5);
+  //   } catch (error) {
+  //     console.error('Error extracting data sample:', error);
+  //     return null;
+  //   }
+  // }, [data]);
 
-  // Log data sample for debugging
-  useEffect(() => {
-    if (dataSample) {
-      console.log('=== Data Sample for LLM ===');
-      console.log('Sample:', dataSample);
-      console.log('Formatted for LLM:');
-      console.log(DataSampler.formatForLLM(dataSample));
-    }
-  }, [dataSample]);
+  // // Log data sample for debugging
+  // useEffect(() => {
+  //   if (dataSample) {
+  //     console.log('=== Data Sample for LLM ===');
+  //     console.log('Sample:', dataSample);
+  //     console.log('Formatted for LLM:');
+  //     console.log(DataSampler.formatForLLM(dataSample));
+  //   }
+  // }, [dataSample]);
 
 
 
 
 
   const getSystemPrompt = () => {
-    const dataContext = dataSample ? DataSampler.formatForLLM(dataSample) : '';
-    const transformationGuidance = DataSampler.getTransformationPrompt();
+    // const dataContext = dataSample ? DataSampler.formatForLLM(dataSample) : '';
+    // const transformationGuidance = DataSampler.getTransformationPrompt();
 
     return `
 You are an expert data visualization assistant specialized in creating Highcharts configurations.
 
 CONTEXT: You're working with query data from an analytics platform. Users will describe their data and visualization needs.
 
-${dataContext}
 
-${transformationGuidance}
 
 CAPABILITIES:
 1. Analyze the provided data sample and recommend optimal chart types
@@ -116,6 +101,24 @@ Use the data analysis above to make informed recommendations. Always prioritize 
     `;
   };
 
+  const sessionIdRef = useRef<string | null>(null);
+  if (sessionIdRef.current === null) {
+    const isDev = import.meta.env.MODE !== 'production';
+    if (isDev && CONFIG.DEFAULT_SESSION_ID) {
+      sessionIdRef.current = CONFIG.DEFAULT_SESSION_ID;
+    } else {
+      const existing = sessionStorage.getItem('wsSessionId');
+      if (existing) {
+        sessionIdRef.current = existing;
+      } else {
+        const sid = Math.random().toString(36).slice(2);
+        sessionStorage.setItem('wsSessionId', sid);
+        sessionIdRef.current = sid;
+      }
+    }
+  }
+  const sessionId = sessionIdRef.current as string;
+
   const handleSubmit = async (e?: React.FormEvent<HTMLFormElement>) => {
     if (e) {
     e.preventDefault();
@@ -135,27 +138,26 @@ Use the data analysis above to make informed recommendations. Always prioritize 
     setIsLoading(true);
 
     try {
-        const openai = new OpenAI({
-          baseURL: "https://openrouter.ai/api/v1",
-          apiKey: import.meta.env.VITE_API_KEY,
-          dangerouslyAllowBrowser: true
-        });
+      // Send request to FastAPI pipeline instead of direct LLM call
+      axios.post('http://localhost:8080/chat/process', {
+        prompt: currentInput,
+        // dataContext: dataSample,
+        mode: currentMode,
+        sessionId
+      }).then((response: any) => {
+        console.log({ response });
+        const assistantMessage: ChatMessage = {
+          id: (Date.now() + 2).toString(),
+          type: 'assistant',
+          content: response.data.explanation || 'No response received',
+          timestamp: new Date()
+        };
+        setChatHistory(prev => [...prev, assistantMessage]);
+      });
+      
 
-          const completion = await openai.chat.completions.create({
-            model: "openai/gpt-oss-20b:free",
-            messages: [
-              {
-                "role": "system",
-                "content": getSystemPrompt()
-              },
-              {
-                "role": "user",
-                "content": currentInput
-              }
-            ],
-          });
-        
-          console.log({ completion });
+
+
 
 //           const completion = `json
 // {
@@ -219,51 +221,17 @@ Use the data analysis above to make informed recommendations. Always prioritize 
 // }
 //           `;
         
-        let parsedResponse = null;
-        try {
-          // const jsonMatch = completion.match(/\{[\s\S]*\}/);
-          const jsonMatch = completion.choices[0].message.content?.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            parsedResponse = JSON.parse(jsonMatch[0]);
-            console.log({ parsedResponse });
-          }
-          // const parsedResponse = JSON.parse(completion.choices[0].message.content || '{}');
-        } catch (error) {
-          console.error('Error parsing JSON:', error);
-        }
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 2).toString(),
-        type: 'assistant',
-        // content: completion.choices[0].message.content || 'No response received',
-        content: parsedResponse?.explanation || 'No response received',
-        timestamp: new Date()
-      };
+      // FastAPI returns only the explanation for chat display
 
-      setChatHistory(prev => [...prev, assistantMessage]);
       
-              // Generate chart from LLM response
-        setIsGeneratingChart(true);
-        try {
-          if (parsedResponse && parsedResponse.chartType && parsedResponse.highchartsConfig) {
-            const chartConfig: ChartConfig = {
-              type: parsedResponse.chartType,
-              title: parsedResponse.highchartsConfig.title?.text || 'Chart',
-              explanation: parsedResponse.explanation || '',
-              confidence: parsedResponse.confidence || 0.8,
-              highchartsOptions: parsedResponse.highchartsConfig
-            };
-            setCurrentChart(chartConfig);
-          }
-        } catch (chartError) {
-          console.error('Error generating chart:', chartError);
-        }
-        setIsGeneratingChart(false);
+      // FastAPI handles chart generation and sends to preview app directly
+      // No chart processing needed in chat app
       
       if (currentMode === 'initial') {
         setCurrentMode('chart-building');
       }
 
-          console.log(completion);
+          // console.log(completion);
     } catch (err) {
       console.error(err);
       const errorMessage: ChatMessage = {
@@ -306,88 +274,7 @@ Use the data analysis above to make informed recommendations. Always prioritize 
   return (
     <div className="sdk-chart-assistant">
       <div className="assistant-container">
-        {/* Chart Preview Section */}
-        <div className="chart-section">
-          <div className="chart-header">
-            <h3>Chart Preview</h3>
-          </div>
-          
-          <div className="chart-container">
-            {currentChart ? (
-              <ChartPreview
-                chartConfig={currentChart}
-                isLoading={isGeneratingChart}
-                onChartReady={(chart) => {
-                  console.log('Chart ready:', chart);
-                }}
-              />
-            ) : (
-              <div className="chart-placeholder">
-                <div className="placeholder-content">
-                  <div className="placeholder-icon">📊</div>
-                  <h4>Your chart will appear here</h4>
-                  <p>Start a conversation to generate a chart visualization</p>
-                </div>
-              </div>
-            )}
-          </div>
-
-                     <div className="chart-options">
-             {/* {dataInsights && (
-               <div className="options-content">
-                 <h4>Data Analysis</h4>
-                 <div className="data-insights">
-                   <div className="insight-section">
-                     <p><strong>Data Overview:</strong></p>
-                     <ul>
-                       <li>{dataInsights.rowCount.toLocaleString()} rows</li>
-                       <li>{dataInsights.columns.length} columns</li>
-                       <li>Complexity: {dataInsights.dataComplexity}</li>
-                     </ul>
-                   </div>
-                   
-                   <div className="insight-section">
-                     <p><strong>Columns:</strong></p>
-                     <ul>
-                       {dataInsights.columns.slice(0, 3).map((col, index) => (
-                         <li key={index}>
-                           {col.name} ({col.dataType})
-                           {col.isMeasure ? ' [Measure]' : ' [Dimension]'}
-                         </li>
-                       ))}
-                       {dataInsights.columns.length > 3 && (
-                         <li>... and {dataInsights.columns.length - 3} more</li>
-                       )}
-                     </ul>
-                   </div>
-
-                   {dataInsights.suggestedCharts.length > 0 && (
-                     <div className="insight-section">
-                       <p><strong>Chart Suggestions:</strong></p>
-                       <ul>
-                         {dataInsights.suggestedCharts.slice(0, 2).map((suggestion, index) => (
-                           <li key={index}>
-                             <strong>{suggestion.type.toUpperCase()}</strong> 
-                             ({Math.round(suggestion.confidence * 100)}% confidence)
-                           </li>
-                         ))}
-                       </ul>
-                     </div>
-                   )}
-                 </div>
-               </div>
-             )} */}
-             
-             {/* {!dataInsights && currentMode !== 'initial' && (
-               <div className="options-content">
-                 <h4>Data Analysis</h4>
-                 <div className="data-insights">
-                   <p>No data available for analysis</p>
-                 </div>
-               </div>
-             )} */}
-           </div>
-        </div>
+        {/* Chat Interface Only - Charts handled by preview app */}
         {/* Chat Section */}
         <div className="chat-section">
           <div className="chat-header">
@@ -399,6 +286,7 @@ Use the data analysis above to make informed recommendations. Always prioritize 
               <div className="welcome-message">
                 <h4>Welcome to Chart Assistant!</h4>
                 <p>I can see your data is ready for analysis. Describe what kind of chart you'd like to create!</p>
+                <p style={{fontSize: 12, opacity: 0.7}}>Session: {sessionId}</p>
                 
               </div>
             ) : (
@@ -432,7 +320,7 @@ Use the data analysis above to make informed recommendations. Always prioritize 
             <div className="input-container">
               <input
                 type="text"
-                value={currentInput}
+                value={currentInput || 'i want a chart that displays products grouped by category'}
                 onChange={(e) => setCurrentInput(e.target.value)}
                 onKeyPress={handleKeyPress}
                 placeholder={getPlaceholderText()}

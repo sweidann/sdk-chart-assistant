@@ -11,7 +11,7 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:chat\" \"npm run dev:preview\" \"npm run dev:export\"",
     "dev:chat": "cd packages/chat_app && PORT=${CHAT_APP_PORT:-8000} npm start",
-    "dev:preview": "cd packages/preview_app && npm start", 
+    "dev:preview": "cd packages/preview_app && npm start",
     "dev:export": "cd services/export-service && source venv/bin/activate && uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload",
     "build": "npm run build:chat && npm run build:preview",
     "build:chat": "cd packages/chat_app && npm run build",
@@ -23,7 +23,8 @@
     "test": "npx pnpm --recursive test"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "vite": "^7.1.2"
   },
   "keywords": [
     "incorta",
